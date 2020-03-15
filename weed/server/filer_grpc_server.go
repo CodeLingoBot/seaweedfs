@@ -242,7 +242,6 @@ func (fs *FilerServer) StreamDeleteEntries(stream filer_pb.SeaweedFiler_StreamDe
 			return err
 		}
 	}
-	return nil
 }
 
 func (fs *FilerServer) AssignVolume(ctx context.Context, req *filer_pb.AssignVolumeRequest) (resp *filer_pb.AssignVolumeResponse, err error) {
@@ -340,4 +339,8 @@ func (fs *FilerServer) GetFilerConfiguration(ctx context.Context, req *filer_pb.
 		DirQueues:   fs.filer.DirQueuesPath,
 		Cipher:      fs.filer.Cipher,
 	}, nil
+}
+
+func (fs *FilerServer) ListFilerClients(context.Context, *filer_pb.ListFilerClientsRequest) (*filer_pb.ListFilerClientsResponse, error) {
+	return nil, fmt.Errorf("not implemented")
 }

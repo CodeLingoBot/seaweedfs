@@ -3,6 +3,7 @@ package weed_server
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"google.golang.org/grpc"
@@ -19,11 +20,14 @@ type MessageBrokerOption struct {
 	DefaultReplication string
 	MaxMB              int
 	Port               int
+	Cipher             bool
 }
 
 type MessageBroker struct {
 	option         *MessageBrokerOption
 	grpcDialOption grpc.DialOption
+	knownFilers    []string
+	knownBrokers   []string
 }
 
 func NewMessageBroker(option *MessageBrokerOption) (messageBroker *MessageBroker, err error) {
@@ -42,7 +46,8 @@ func (broker *MessageBroker) loopForEver() {
 
 	for {
 		broker.checkPeers()
-		time.Sleep(3 * time.Second)
+		// do not need to check often to have a slow changing topology
+		time.Sleep(30 * time.Second)
 	}
 
 }
@@ -51,8 +56,9 @@ func (broker *MessageBroker) checkPeers() {
 
 	// contact a filer about masters
 	var masters []string
-	for _, filer := range broker.option.Filers {
-		err := broker.withFilerClient(filer, func(client filer_pb.SeaweedFilerClient) error {
+	startingFilers := append(broker.knownFilers, broker.option.Filers...)
+	for _, filer := range startingFilers {
+		err := broker.withGrpcFilerClient(filer, func(client filer_pb.SeaweedFilerClient) error {
 			resp, err := client.GetFilerConfiguration(context.Background(), &filer_pb.GetFilerConfigurationRequest{})
 			if err != nil {
 				return err
@@ -65,6 +71,7 @@ func (broker *MessageBroker) checkPeers() {
 			return
 		}
 	}
+	masters = dedup(masters)
 
 	// contact each masters for filers
 	var filers []string
@@ -87,15 +94,21 @@ func (broker *MessageBroker) checkPeers() {
 			return
 		}
 	}
+	filers = dedup(filers)
+	sort.Strings(filers)
+	broker.knownFilers = filers
 
 	// contact each filer about brokers
+	var peers []string
 	for _, filer := range filers {
-		err := broker.withFilerClient(filer, func(client filer_pb.SeaweedFilerClient) error {
-			resp, err := client.GetFilerConfiguration(context.Background(), &filer_pb.GetFilerConfigurationRequest{})
+		err := broker.withGrpcFilerClient(filer, func(client filer_pb.SeaweedFilerClient) error {
+			resp, err := client.ListFilerClients(context.Background(), &filer_pb.ListFilerClientsRequest{
+				ClientType: "msg.broker",
+			})
 			if err != nil {
 				return err
 			}
-			masters = append(masters, resp.Masters...)
+			peers = append(peers, resp.GrpcAddresses...)
 			return nil
 		})
 		if err != nil {
@@ -103,12 +116,13 @@ func (broker *MessageBroker) checkPeers() {
 			return
 		}
 	}
+	broker.knownBrokers = peers
 
 }
 
-func (broker *MessageBroker) withFilerClient(filer string, fn func(filer_pb.SeaweedFilerClient) error) error {
+func (broker *MessageBroker) withGrpcFilerClient(filer string, fn func(filer_pb.SeaweedFilerClient) error) error {
 
-	return pb.WithFilerClient(filer, broker.grpcDialOption, fn)
+	return pb.WithGrpcFilerClient(filer, broker.grpcDialOption, fn)
 
 }
 
@@ -118,4 +132,15 @@ func (broker *MessageBroker) withMasterClient(master string, fn func(client mast
 		return fn(client)
 	})
 
+}
+
+func dedup(list []string) (deduped []string) {
+	m := make(map[string]bool)
+	for _, t := range list {
+		m[t] = true
+	}
+	for k := range m {
+		deduped = append(deduped, k)
+	}
+	return
 }

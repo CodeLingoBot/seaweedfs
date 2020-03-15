@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc/reflection"
@@ -31,7 +32,7 @@ type QueueOptions struct {
 func init() {
 	cmdMsgBroker.Run = runMsgBroker // break init cycle
 	messageBrokerStandaloneOptions.filer = cmdMsgBroker.Flag.String("filer", "localhost:8888", "filer server address")
-	messageBrokerStandaloneOptions.port = cmdMsgBroker.Flag.Int("port", 17777, "queue server gRPC listen port")
+	messageBrokerStandaloneOptions.port = cmdMsgBroker.Flag.Int("port", 19999, "queue server gRPC listen port")
 	messageBrokerStandaloneOptions.defaultTtl = cmdMsgBroker.Flag.String("ttl", "1h", "time to live, e.g.: 1m, 1h, 1d, 1M, 1y")
 }
 
@@ -56,40 +57,45 @@ func runMsgBroker(cmd *Command, args []string) bool {
 
 func (msgBrokerOpt *QueueOptions) startQueueServer() bool {
 
-	filerGrpcAddress, err := pb.ParseFilerGrpcAddress(*msgBrokerOpt.filer)
-	if err != nil {
-		glog.Fatal(err)
-		return false
-	}
+	filerGrpcAddresses := toGrpcAddresses(strings.Split(*msgBrokerOpt.filer, ","))
 
 	filerQueuesPath := "/queues"
+	replication := ""
+	cipher := false
 
 	grpcDialOption := security.LoadClientTLS(util.GetViper(), "grpc.client")
 
-	for {
-		err = pb.WithGrpcFilerClient(filerGrpcAddress, grpcDialOption, func(client filer_pb.SeaweedFilerClient) error {
-			resp, err := client.GetFilerConfiguration(context.Background(), &filer_pb.GetFilerConfigurationRequest{})
+	connected := false
+	for !connected {
+		for _, filerGrpcAddress := range filerGrpcAddresses {
+			err = pb.WithGrpcFilerClient(filerGrpcAddress, grpcDialOption, func(client filer_pb.SeaweedFilerClient) error {
+				resp, err := client.GetFilerConfiguration(context.Background(), &filer_pb.GetFilerConfigurationRequest{})
+				if err != nil {
+					return fmt.Errorf("get filer %s configuration: %v", filerGrpcAddress, err)
+				}
+				filerQueuesPath = resp.DirQueues
+				replication = resp.Replication
+				cipher = resp.Cipher
+				glog.V(0).Infof("Queue read filer queues dir: %s", filerQueuesPath)
+				return nil
+			})
 			if err != nil {
-				return fmt.Errorf("get filer %s configuration: %v", filerGrpcAddress, err)
+				glog.V(0).Infof("wait to connect to filer %s grpc address %s", *msgBrokerOpt.filer, filerGrpcAddress)
+				time.Sleep(time.Second)
+			} else {
+				glog.V(0).Infof("connected to filer %s grpc address %s", *msgBrokerOpt.filer, filerGrpcAddress)
+				connected = true
+				break
 			}
-			filerQueuesPath = resp.DirQueues
-			glog.V(0).Infof("Queue read filer queues dir: %s", filerQueuesPath)
-			return nil
-		})
-		if err != nil {
-			glog.V(0).Infof("wait to connect to filer %s grpc address %s", *msgBrokerOpt.filer, filerGrpcAddress)
-			time.Sleep(time.Second)
-		} else {
-			glog.V(0).Infof("connected to filer %s grpc address %s", *msgBrokerOpt.filer, filerGrpcAddress)
-			break
 		}
 	}
 
 	qs, err := weed_server.NewMessageBroker(&weed_server.MessageBrokerOption{
-		Filers:             []string{*msgBrokerOpt.filer},
-		DefaultReplication: "",
+		Filers:             filerGrpcAddresses,
+		DefaultReplication: replication,
 		MaxMB:              0,
 		Port:               *msgBrokerOpt.port,
+		Cipher:             cipher,
 	})
 
 	// start grpc listener
@@ -104,4 +110,15 @@ func (msgBrokerOpt *QueueOptions) startQueueServer() bool {
 
 	return true
 
+}
+
+func toGrpcAddresses(normalAddresses []string) (grpcAddresses []string) {
+	for _, normalAddress := range normalAddresses {
+		grpcAddress, err := pb.ParseFilerGrpcAddress(normalAddress)
+		if err != nil {
+			glog.Fatal(err)
+		}
+		grpcAddresses = append(grpcAddresses, grpcAddress)
+	}
+	return
 }

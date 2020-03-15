@@ -45,6 +45,9 @@ service SeaweedFiler {
     rpc GetFilerConfiguration (GetFilerConfigurationRequest) returns (GetFilerConfigurationResponse) {
     }
 
+    rpc ListFilerClients (ListFilerClientsRequest) returns (ListFilerClientsResponse) {
+    }
+
 }
 
 //////////////////////////////////////////////////
@@ -232,4 +235,11 @@ message GetFilerConfigurationResponse {
     string dir_buckets = 5;
     string dir_queues = 6;
     bool cipher = 7;
+}
+
+message ListFilerClientsRequest {
+    string client_type = 1;
+}
+message ListFilerClientsResponse {
+    repeated string grpc_addresses = 1;
 }
