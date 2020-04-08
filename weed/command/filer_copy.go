@@ -181,7 +181,7 @@ func readFilerConfiguration(grpcDialOption grpc.DialOption, filerGrpcAddress str
 	return
 }
 
-func genFileCopyTask(fileOrDir string, destPath string, fileCopyTaskChan chan FileCopyTask) error {
+func genFileCopyTask(fileOrDir string, destPath string, fileCopyTaskChan chan<- FileCopyTask) error {
 
 	fi, err := os.Stat(fileOrDir)
 	if err != nil {
@@ -220,7 +220,7 @@ type FileCopyWorker struct {
 	filerGrpcAddress string
 }
 
-func (worker *FileCopyWorker) copyFiles(fileCopyTaskChan chan FileCopyTask) error {
+func (worker *FileCopyWorker) copyFiles(fileCopyTaskChan <-chan FileCopyTask) error {
 	for task := range fileCopyTaskChan {
 		if err := worker.doEachCopy(task); err != nil {
 			return err

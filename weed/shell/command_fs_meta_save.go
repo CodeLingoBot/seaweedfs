@@ -69,7 +69,7 @@ func (c *commandFsMetaSave) Do(args []string, commandEnv *CommandEnv, writer io.
 	}
 	defer dst.Close()
 
-	err = doTraverseBfsAndSaving(commandEnv, writer, path, *verbose, func(outputChan chan interface{}) {
+	err = doTraverseBfsAndSaving(commandEnv, writer, path, *verbose, func(outputChan <-chan interface{}) {
 		sizeBuf := make([]byte, 4)
 		for item := range outputChan {
 			b := item.([]byte)
@@ -77,7 +77,7 @@ func (c *commandFsMetaSave) Do(args []string, commandEnv *CommandEnv, writer io.
 			dst.Write(sizeBuf)
 			dst.Write(b)
 		}
-	}, func(entry *filer_pb.FullEntry, outputChan chan interface{}) (err error) {
+	}, func(entry *filer_pb.FullEntry, outputChan chan<- interface{}) (err error) {
 		bytes, err := proto.Marshal(entry)
 		if err != nil {
 			fmt.Fprintf(writer, "marshall error: %v\n", err)

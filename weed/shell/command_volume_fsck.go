@@ -184,14 +184,14 @@ func (c *commandVolumeFsck) collectFilerFileIds(tempFolder string, volumeIdToSer
 		vid     uint32
 		fileKey uint64
 	}
-	return doTraverseBfsAndSaving(c.env, nil, "/", false, func(outputChan chan interface{}) {
+	return doTraverseBfsAndSaving(c.env, nil, "/", false, func(outputChan <-chan interface{}) {
 		buffer := make([]byte, 8)
 		for item := range outputChan {
 			i := item.(*Item)
 			util.Uint64toBytes(buffer, i.fileKey)
 			files[i.vid].Write(buffer)
 		}
-	}, func(entry *filer_pb.FullEntry, outputChan chan interface{}) (err error) {
+	}, func(entry *filer_pb.FullEntry, outputChan chan<- interface{}) (err error) {
 		for _, chunk := range entry.Entry.Chunks {
 			outputChan <- &Item{
 				vid:     chunk.Fid.VolumeId,

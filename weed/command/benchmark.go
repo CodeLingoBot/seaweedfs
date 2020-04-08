@@ -195,7 +195,7 @@ type delayedFile struct {
 	fp        *operation.FilePart
 }
 
-func writeFiles(idChan chan int, fileIdLineChan chan string, s *stat) {
+func writeFiles(idChan <-chan int, fileIdLineChan chan<- string, s *stat) {
 	defer wait.Done()
 	delayedDeleteChan := make(chan *delayedFile, 100)
 	var waitForDeletions sync.WaitGroup
@@ -267,7 +267,7 @@ func writeFiles(idChan chan int, fileIdLineChan chan string, s *stat) {
 	waitForDeletions.Wait()
 }
 
-func readFiles(fileIdLineChan chan string, s *stat) {
+func readFiles(fileIdLineChan <-chan string, s *stat) {
 	defer wait.Done()
 
 	for fid := range fileIdLineChan {
@@ -336,7 +336,7 @@ func grpcFileGet(volumeServer, fid string, grpcDialOption grpc.DialOption) (byte
 	return
 }
 
-func writeFileIds(fileName string, fileIdLineChan chan string, finishChan chan bool) {
+func writeFileIds(fileName string, fileIdLineChan <-chan string, finishChan <-chan bool) {
 	file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		glog.Fatalf("File to create file %s: %s\n", fileName, err)
@@ -355,7 +355,7 @@ func writeFileIds(fileName string, fileIdLineChan chan string, finishChan chan b
 	}
 }
 
-func readFileIds(fileName string, fileIdLineChan chan string) {
+func readFileIds(fileName string, fileIdLineChan chan<- string) {
 	file, err := os.Open(fileName) // For read access.
 	if err != nil {
 		glog.Fatalf("File to read file %s: %s\n", fileName, err)
@@ -434,7 +434,7 @@ func (s *stats) addSample(d time.Duration) {
 	}
 }
 
-func (s *stats) checkProgress(testName string, finishChan chan bool) {
+func (s *stats) checkProgress(testName string, finishChan <-chan bool) {
 	fmt.Printf("\n------------ %s ----------\n", testName)
 	ticker := time.Tick(time.Second)
 	lastCompleted, lastTransferred, lastTime := 0, int64(0), time.Now()

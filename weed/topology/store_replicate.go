@@ -138,7 +138,7 @@ func distributedOperation(locations []operation.Location, store *storage.Store, 
 	length := len(locations)
 	results := make(chan RemoteResult)
 	for _, location := range locations {
-		go func(location operation.Location, results chan RemoteResult) {
+		go func(location operation.Location, results chan<- RemoteResult) {
 			results <- RemoteResult{location.Url, op(location)}
 		}(location, results)
 	}
